@@ -46,9 +46,12 @@ namespace osu.Server.QueueProcessor
 
         private readonly QueueConfiguration config;
 
-        private readonly Lazy<ConnectionMultiplexer> redis = new Lazy<ConnectionMultiplexer>(RedisAccess.GetConnection);
+        private readonly Lazy<IDatabase> redis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
 
-        private IDatabase getRedisDatabase() => redis.Value.GetDatabase();
+        /// <summary>
+        /// Access redis instance.
+        /// </summary>
+        protected IDatabase Redis => redis.Value;
 
         private long totalProcessed;
 
@@ -90,8 +93,6 @@ namespace osu.Server.QueueProcessor
 
                 using (var threadPool = new ThreadedTaskScheduler(Environment.ProcessorCount, "workers"))
                 {
-                    IDatabase database = getRedisDatabase();
-
                     while (!cts.Token.IsCancellationRequested)
                     {
                         if (consecutiveErrors > config.ErrorThreshold)
@@ -105,7 +106,7 @@ namespace osu.Server.QueueProcessor
                                 continue;
                             }
 
-                            var redisItems = database.ListRightPop(QueueName, config.BatchSize);
+                            var redisItems = Redis.ListRightPop(QueueName, config.BatchSize);
 
                             // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract (https://github.com/StackExchange/StackExchange.Redis/issues/2697)
                             // queue doesn't exist.
@@ -232,19 +233,19 @@ namespace osu.Server.QueueProcessor
         /// </summary>
         /// <param name="item"></param>
         public void PushToQueue(T item) =>
-            getRedisDatabase().ListLeftPush(QueueName, JsonConvert.SerializeObject(item));
+            Redis.ListLeftPush(QueueName, JsonConvert.SerializeObject(item));
 
         /// <summary>
         /// Push multiple items to the queue.
         /// </summary>
         /// <param name="items"></param>
         public void PushToQueue(IEnumerable<T> items) =>
-            getRedisDatabase().ListLeftPush(QueueName, items.Select(obj => new RedisValue(JsonConvert.SerializeObject(obj))).ToArray());
+            Redis.ListLeftPush(QueueName, items.Select(obj => new RedisValue(JsonConvert.SerializeObject(obj))).ToArray());
 
         public long GetQueueSize() =>
-            getRedisDatabase().ListLength(QueueName);
+            Redis.ListLength(QueueName);
 
-        public void ClearQueue() => getRedisDatabase().KeyDelete(QueueName);
+        public void ClearQueue() => Redis.KeyDelete(QueueName);
 
         /// <summary>
         /// Publishes a message to a Redis channel with the supplied <paramref name="channelName"/>.
@@ -258,7 +259,7 @@ namespace osu.Server.QueueProcessor
         /// <typeparam name="TMessage">The type of message to be published.</typeparam>
         public void PublishMessage<TMessage>(string channelName, TMessage message)
         {
-            getRedisDatabase().Publish(new RedisChannel(channelName, RedisChannel.PatternMode.Auto), JsonConvert.SerializeObject(message));
+            Redis.Publish(new RedisChannel(channelName, RedisChannel.PatternMode.Auto), JsonConvert.SerializeObject(message));
             DogStatsd.Increment("messages_published", tags: new[] { $"channel:{channelName}", $"type:{typeof(TMessage).FullName}" });
         }
 
