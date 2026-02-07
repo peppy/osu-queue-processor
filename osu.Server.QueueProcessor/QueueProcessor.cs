@@ -48,10 +48,19 @@ namespace osu.Server.QueueProcessor
 
         private readonly Lazy<IDatabase> redis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
 
+        private readonly Lazy<IDatabase> blockingRedis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
+
         /// <summary>
         /// Access redis instance.
         /// </summary>
         protected IDatabase Redis => redis.Value;
+
+        /// <summary>
+        /// Allows access to a separate redis instance (connection) dedicated to blocking calls.
+        /// Must not be accessed from more than one thread. Currently used only in <see cref="Run"/>.
+        /// This is a workaround for <c>StackExchange.Redis</c> not offering support for operations like <c>BRPOP</c>.
+        /// </summary>
+        private IDatabase BlockingRedis => blockingRedis.Value;
 
         private long totalProcessed;
 
@@ -100,20 +109,38 @@ namespace osu.Server.QueueProcessor
 
                         try
                         {
+                            // avoid processing too many items at once
                             if (totalInFlight >= config.MaxInFlightItems || consecutiveErrors > config.ErrorThreshold)
                             {
                                 Thread.Sleep(config.TimeBetweenPolls);
                                 continue;
                             }
 
-                            var redisItems = Redis.ListRightPop(QueueName, config.BatchSize);
+                            RedisValue[] redisItems;
 
-                            // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract (https://github.com/StackExchange/StackExchange.Redis/issues/2697)
-                            // queue doesn't exist.
-                            if (redisItems == null)
+                            if (config.UseBlockingPop)
                             {
-                                Thread.Sleep(config.TimeBetweenPolls);
-                                continue;
+                                // timeout in seconds, can't be higher than the Redis library timeout (default is 5 seconds)
+                                const string timeout = "1";
+
+                                RedisResult redisResult = BlockingRedis.Execute("BRPOP", QueueName, timeout);
+
+                                if (redisResult.IsNull)
+                                    continue;
+
+                                redisItems = [(RedisValue)redisResult[1]];
+                            }
+                            else
+                            {
+                                redisItems = Redis.ListRightPop(QueueName, config.BatchSize);
+
+                                // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract (https://github.com/StackExchange/StackExchange.Redis/issues/2697)
+                                // queue doesn't exist.
+                                if (redisItems == null)
+                                {
+                                    Thread.Sleep(config.TimeBetweenPolls);
+                                    continue;
+                                }
                             }
 
                             List<T> items = new List<T>();

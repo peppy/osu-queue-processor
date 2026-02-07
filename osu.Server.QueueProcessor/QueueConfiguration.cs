@@ -34,5 +34,14 @@ namespace osu.Server.QueueProcessor
         /// Setting above 1 will allow processing in batches (see <see cref="QueueProcessor{T}.ProcessResults"/>).
         /// </summary>
         public int BatchSize { get; set; } = 1;
+
+        /// <summary>
+        /// When enabled, uses <c>BRPOP</c> to wait for items instead of polling with <c>RPOP</c>.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="BatchSize"/> is ignored when this is enabled.
+        /// <see cref="TimeBetweenPolls"/> is still used as a delay for when processor is overloaded.
+        /// </remarks>
+        public bool UseBlockingPop { get; set; } = false;
     }
 }
