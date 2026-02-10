@@ -49,13 +49,6 @@ namespace osu.Server.QueueProcessor
         private readonly Lazy<IDatabase> redis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
 
         /// <summary>
-        /// Separate redis instance (connection) dedicated to blocking calls.
-        /// Must not be accessed from more than one thread. Currently used only in <see cref="Run"/>.
-        /// This is a workaround for <c>StackExchange.Redis</c> not offering support for operations like <c>BRPOP</c>.
-        /// </summary>
-        private readonly Lazy<IDatabase> blockingRedis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
-
-        /// <summary>
         /// Access redis instance.
         /// </summary>
         protected IDatabase Redis => redis.Value;
@@ -92,6 +85,9 @@ namespace osu.Server.QueueProcessor
         /// <param name="cancellation">An optional cancellation token.</param>
         public void Run(CancellationToken cancellation = default)
         {
+            // dedicated redis connection for the BRPOP path, workaround for StackExchange.Redis not offering blocking operations
+            var blockingRedis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
+
             using (SentrySdk.Init(setupSentry))
             using (new Timer(_ => outputStats(), null, TimeSpan.Zero, TimeSpan.FromSeconds(5)))
             using (var cts = new GracefulShutdownSource(cancellation))
@@ -118,7 +114,7 @@ namespace osu.Server.QueueProcessor
 
                             if (config.UseBlockingPop)
                             {
-                                // timeout in seconds, can't be higher than the Redis library timeout (default is 5 seconds)
+                                // timeout in seconds, can't be higher than StackExchange.Redis timeout (default is 5 seconds)
                                 const string timeout = "1";
 
                                 RedisResult redisResult = blockingRedis.Value.Execute("BRPOP", QueueName, timeout);
