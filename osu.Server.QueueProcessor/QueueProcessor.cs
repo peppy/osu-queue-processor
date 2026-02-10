@@ -48,19 +48,17 @@ namespace osu.Server.QueueProcessor
 
         private readonly Lazy<IDatabase> redis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
 
+        /// <summary>
+        /// Separate redis instance (connection) dedicated to blocking calls.
+        /// Must not be accessed from more than one thread. Currently used only in <see cref="Run"/>.
+        /// This is a workaround for <c>StackExchange.Redis</c> not offering support for operations like <c>BRPOP</c>.
+        /// </summary>
         private readonly Lazy<IDatabase> blockingRedis = new Lazy<IDatabase>(() => RedisAccess.GetConnection().GetDatabase());
 
         /// <summary>
         /// Access redis instance.
         /// </summary>
         protected IDatabase Redis => redis.Value;
-
-        /// <summary>
-        /// Allows access to a separate redis instance (connection) dedicated to blocking calls.
-        /// Must not be accessed from more than one thread. Currently used only in <see cref="Run"/>.
-        /// This is a workaround for <c>StackExchange.Redis</c> not offering support for operations like <c>BRPOP</c>.
-        /// </summary>
-        private IDatabase BlockingRedis => blockingRedis.Value;
 
         private long totalProcessed;
 
@@ -123,7 +121,7 @@ namespace osu.Server.QueueProcessor
                                 // timeout in seconds, can't be higher than the Redis library timeout (default is 5 seconds)
                                 const string timeout = "1";
 
-                                RedisResult redisResult = BlockingRedis.Execute("BRPOP", QueueName, timeout);
+                                RedisResult redisResult = blockingRedis.Value.Execute("BRPOP", QueueName, timeout);
 
                                 if (redisResult.IsNull)
                                     continue;
