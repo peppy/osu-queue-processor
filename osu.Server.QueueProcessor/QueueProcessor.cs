@@ -110,7 +110,7 @@ namespace osu.Server.QueueProcessor
                         try
                         {
                             // avoid processing too many items at once
-                            if (totalInFlight >= config.MaxInFlightItems || consecutiveErrors > config.ErrorThreshold)
+                            if (totalInFlight >= config.MaxInFlightItems)
                             {
                                 Thread.Sleep(config.TimeBetweenPolls);
                                 continue;
