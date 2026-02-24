@@ -56,7 +56,7 @@ namespace osu.Server.QueueProcessor
 
             if (lastQueueId.HasValue)
             {
-                var items = (await connection.QueryAsync<bss_process_queue_item>("SELECT * FROM bss_process_queue WHERE queue_id > @lastQueueId ORDER BY queue_id LIMIT @limit", new
+                var items = (await connection.QueryAsync<bss_process_queue_item>("SELECT queue_id, beatmapset_id FROM bss_process_queue WHERE queue_id > @lastQueueId ORDER BY queue_id LIMIT @limit", new
                 {
                     lastQueueId,
                     limit
@@ -69,7 +69,7 @@ namespace osu.Server.QueueProcessor
                 };
             }
 
-            var lastEntry = await connection.QueryFirstOrDefaultAsync<bss_process_queue_item>("SELECT * FROM bss_process_queue ORDER BY queue_id DESC LIMIT 1");
+            var lastEntry = await connection.QueryFirstOrDefaultAsync<bss_process_queue_item>("SELECT queue_id, beatmapset_id FROM bss_process_queue ORDER BY queue_id DESC LIMIT 1");
 
             return new BeatmapUpdates
             {
