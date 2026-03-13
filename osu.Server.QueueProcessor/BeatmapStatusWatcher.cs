@@ -64,7 +64,7 @@ namespace osu.Server.QueueProcessor
 
                 return new BeatmapUpdates
                 {
-                    BeatmapSetIDs = items.Select(i => i.beatmapset_id).ToArray(),
+                    BeatmapSetIDs = items.Select(i => i.beatmapset_id).Distinct().ToArray(),
                     LastProcessedQueueID = items.LastOrDefault()?.queue_id ?? lastQueueId.Value
                 };
             }
